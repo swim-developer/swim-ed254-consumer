@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swim-ed254-consumer
+  namespace: swim-demo
+  labels:
+    app: swim-ed254-consumer
+    app.kubernetes.io/part-of: swim-ed254
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: swim-ed254-consumer
+  template:
+    metadata:
+      labels:
+        app: swim-ed254-consumer
+    spec:
+      containers:
+      - name: swim-ed254-consumer
+        image: quay.io/masales/swim-ed254-consumer:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+          name: http
+        env:
+        - name: MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-credentials
+              key: database-user
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-credentials
+              key: database-password
+        - name: MONGODB_HOST
+          value: mongodb.swim-demo.svc.cluster.local
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_URI
+          value: mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@$(MONGODB_HOST):$(MONGODB_PORT)
+        - name: MONGODB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: MONGODB_DATABASE
+        - name: SWIM_PROVIDERS
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: SWIM_PROVIDERS
+        - name: ED254_SUBSCRIPTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: ED254_SUBSCRIPTIONS
+        - name: SWIM_VALIDATION_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: SWIM_VALIDATION_ENABLED
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: OTEL_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: OTEL_ENABLED
+        - name: OTEL_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: OTEL_ENDPOINT
+        - name: OTEL_HEADERS
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: OTEL_HEADERS
+        - name: PROMETHEUS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: swim-ed254-consumer-config
+              key: PROMETHEUS_ENABLED
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        volumeMounts:
+        - name: mtls-certs
+          mountPath: /secrets
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: mtls-certs
+        secret:
+          secretName: swim-ed254-consumer-mtls
+          items:
+          - key: client-keystore.p12
+            path: client-keystore.p12
+          - key: truststore.p12
+            path: truststore.p12

@@ -1,0 +1,63 @@
+namespace: swim-demo
+
+appName: swim-ed254-consumer
+
+labels:
+  app: swim-ed254-consumer
+  app.kubernetes.io/part-of: swim-ed254
+
+image:
+  repository: quay.io/masales/swim-ed254-consumer
+  tag: latest
+  pullPolicy: Always
+
+replicas: 1
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+    cpu: "1"
+
+service:
+  port: 8080
+
+hpa:
+  enabled: false
+
+config:
+  mongodbDatabase: "swim-ed254"
+  ed254Subscriptions: '[{"topic":"ED254/v1","provider":"default","description":"Arrival sequences"}]'
+  swimProviders: '[{"providerId":"default","subscriptionManager":{"url":"https://swim-ed254-consumer-validator.apps-crc.testing","tls":{"trustStorePath":"/secrets/truststore.p12","trustStorePassword":"changeit","keyStorePath":"/secrets/keystore.p12","keyStorePassword":"changeit"},"resilience":{"connectTimeoutMs":30000,"readTimeoutMs":30000,"retryMaxAttempts":3,"retryDelayMs":1000}},"amqpBroker":{"host":"validator-artemis-amqps-0-svc-rte-swim-demo.apps-crc.testing","port":443,"sslEnabled":true,"username":"admin","password":"admin","tls":{"trustStorePath":"/secrets/truststore.p12","trustStorePassword":"changeit","keyStorePath":"/secrets/keystore.p12","keyStorePassword":"changeit"}}}]'
+  swimValidationEnabled: "true"
+  kafkaBootstrapServers: "kafka-kafka-bootstrap.swim-demo.svc.cluster.local:9092"
+  otelEnabled: "false"
+  otelEndpoint: ""
+  otelHeaders: ""
+  prometheusEnabled: "true"
+
+certManager:
+  enabled: true
+  issuerName: swim-ca-issuer
+  issuerKind: ClusterIssuer
+  keystorePassword: changeit
+
+mongodb:
+  host: "ed254-consumer-mongodb.swim-demo.svc.cluster.local"
+  port: "27017"
+  secretName: ed254-consumer-mongodb-credentials
+  userKey: database-user
+  passwordKey: database-password
+
+mtls:
+  keystorePassword: changeit
+  truststorePassword: changeit
+  clientKeystoreP12: ""
+  truststoreP12: ""
+  amqpUsername: "admin"
+  amqpPassword: "admin"
+
+serviceMonitor:
+  enabled: false

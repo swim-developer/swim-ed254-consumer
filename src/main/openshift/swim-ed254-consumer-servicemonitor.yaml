@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: swim-ed254-consumer-metrics
+  labels:
+    app: swim-ed254-consumer
+    app.kubernetes.io/name: swim-ed254-consumer
+    app.kubernetes.io/part-of: swim-operator
+spec:
+  selector:
+    matchLabels:
+      app: swim-ed254-consumer
+  endpoints:
+  - port: http
+    path: /q/metrics
+    interval: 30s
+    scrapeTimeout: 10s

@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "swim-ed254-consumer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "swim-ed254-consumer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "swim-ed254-consumer.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.appName }}
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.port }}
+          protocol: TCP
+          name: http
+        env:
+        - name: MONGODB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mongodb.secretName }}
+              key: {{ .Values.mongodb.userKey }}
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mongodb.secretName }}
+              key: {{ .Values.mongodb.passwordKey }}
+        - name: MONGODB_HOST
+          value: {{ .Values.mongodb.host | quote }}
+        - name: MONGODB_PORT
+          value: {{ .Values.mongodb.port | quote }}
+        - name: MONGODB_URI
+          value: "mongodb://$(MONGODB_USERNAME):$(MONGODB_PASSWORD)@$(MONGODB_HOST):$(MONGODB_PORT)"
+        - name: MONGODB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: MONGODB_DATABASE
+        - name: SWIM_PROVIDERS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: SWIM_PROVIDERS
+        - name: ED254_SUBSCRIPTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: ED254_SUBSCRIPTIONS
+        - name: SWIM_VALIDATION_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: SWIM_VALIDATION_ENABLED
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: OTEL_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: OTEL_ENABLED
+        - name: OTEL_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: OTEL_ENDPOINT
+        - name: OTEL_HEADERS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: OTEL_HEADERS
+        - name: PROMETHEUS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Values.appName }}-config
+              key: PROMETHEUS_ENABLED
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: mtls-certs
+          mountPath: /secrets
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 9000
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 9000
+          initialDelaySeconds: 3
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: mtls-certs
+        secret:
+          secretName: {{ .Values.appName }}-mtls
+          items:
+          - key: keystore.p12
+            path: keystore.p12
+          - key: truststore.p12
+            path: truststore.p12

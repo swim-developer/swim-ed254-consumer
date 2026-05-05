@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: swim-ed254-consumer
+  namespace: swim-demo
+  labels:
+    app: swim-ed254-consumer
+    app.kubernetes.io/part-of: swim-ed254
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: swim-ed254-consumer

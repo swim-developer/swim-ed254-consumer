@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.appName }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "swim-ed254-consumer.labels" . | nindent 4 }}
+    component: configuration
+data:
+  MONGODB_DATABASE: {{ .Values.config.mongodbDatabase | quote }}
+  ED254_SUBSCRIPTIONS: {{ .Values.config.ed254Subscriptions | quote }}
+  SWIM_PROVIDERS: {{ .Values.config.swimProviders | quote }}
+  SWIM_VALIDATION_ENABLED: {{ .Values.config.swimValidationEnabled | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.config.kafkaBootstrapServers | quote }}
+  OTEL_ENABLED: {{ .Values.config.otelEnabled | quote }}
+  OTEL_ENDPOINT: {{ .Values.config.otelEndpoint | quote }}
+  OTEL_HEADERS: {{ .Values.config.otelHeaders | quote }}
+  PROMETHEUS_ENABLED: {{ .Values.config.prometheusEnabled | quote }}
