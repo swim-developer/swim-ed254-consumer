@@ -392,7 +392,7 @@ For operator-based deployment (single CR), see [swim-operator](https://github.co
 |---------|----------------|
 | [swim-ed254-consumer-validator](https://github.com/swim-developer/swim-developer-validators) | Fake SWIM provider for local testing: included in `compose.yml` |
 | [swim-developer-extensions](https://github.com/swim-developer/swim-developer-extensions) | Kafka outbox routers for ED-254 events |
-| [fixm-ed254-model](https://github.com/swim-developer/fixm-model-ed254) | FIXM 4.3 + ED-254 JAXB bindings used internally |
+| [swim-fixm-model-ed254](https://github.com/swim-developer/swim-fixm-model-ed254) | FIXM 4.3 + ED-254 JAXB bindings used internally |
 | [swim-developer-framework](https://github.com/swim-developer/swim-developer-framework) | Core framework this service is built on |
 | [swim-developer-tools](https://github.com/swim-developer/swim-developer-tools) | Certificate generation, full-stack compose, pipelines |
 

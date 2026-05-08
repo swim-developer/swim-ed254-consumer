@@ -57,7 +57,7 @@
         </dependency>
         <dependency>
             <groupId>com.github.swim-developer</groupId>
-            <artifactId>fixm-ed254-model</artifactId>
+            <artifactId>swim-fixm-model-ed254</artifactId>
             <version>${project.version}</version>
             <exclusions>
                 <exclusion>
