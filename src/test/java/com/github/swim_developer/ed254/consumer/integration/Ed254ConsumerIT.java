@@ -71,7 +71,7 @@ class Ed254ConsumerIT {
 
     private static final String VALID_ED254_XML = """
             <?xml version="1.0" encoding="UTF-8"?>
-            <arrivalSequence xmlns="http://www.fixm.aero/ed254/1.0"
+            <arrivalSequence xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0"
                 xmlns:fb="http://www.fixm.aero/base/4.3"
                 xmlns:fx="http://www.fixm.aero/flight/4.3">
                 <creationTime>%CREATION_TIME%</creationTime>
@@ -658,7 +658,7 @@ class Ed254ConsumerIT {
     void wfsGetFeatureReturnsEd254Xml() {
         String ed254Response = """
                 <?xml version="1.0" encoding="UTF-8"?>
-                <arrivalSequence xmlns="http://www.fixm.aero/ed254/1.0"
+                <arrivalSequence xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0"
                     aerodromeDesignator="LPPT">
                     <sequenceEntries/>
                 </arrivalSequence>
@@ -729,7 +729,7 @@ class Ed254ConsumerIT {
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/xml")
-                        .withBody("<arrivalSequence xmlns=\"http://www.fixm.aero/ed254/1.0\" aerodromeDesignator=\"LPPT\"/>")));
+                        .withBody("<arrivalSequence xmlns=\"http://coopans.org/swim/ed254/arrivalSequence/1.0\" aerodromeDesignator=\"LPPT\"/>")));
 
         String body = given()
                 .queryParam("typeName", "arrivalSequence:ArrivalSequence")
@@ -1045,7 +1045,7 @@ class Ed254ConsumerIT {
 
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
-                <arrivalSequence xmlns="http://www.fixm.aero/ed254/1.0"
+                <arrivalSequence xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0"
                     xmlns:fb="http://www.fixm.aero/base/4.3"
                     xmlns:fx="http://www.fixm.aero/flight/4.3">
                     <creationTime>%s</creationTime>

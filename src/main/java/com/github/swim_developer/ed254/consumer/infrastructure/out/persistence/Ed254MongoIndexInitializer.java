@@ -35,9 +35,8 @@ public class Ed254MongoIndexInitializer extends AbstractMongoIndexInitializer {
         super(mongoClient);
     }
 
-    @Override
     public void onStart(@Observes StartupEvent event) {
-        super.onStart(event);
+        super.onStart();
     }
 
     @Override

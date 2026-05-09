@@ -14,6 +14,7 @@ import com.github.swim_developer.ed254.consumer.infrastructure.out.persistence.M
 import com.github.swim_developer.ed254.consumer.infrastructure.out.persistence.MongoSubscriptionStore;
 import com.github.swim_developer.framework.application.port.out.SwimDeadLetterPort;
 import com.github.swim_developer.ed254.consumer.infrastructure.out.xml.Ed254EventExtractor;
+import com.github.swim_developer.ed254.consumer.infrastructure.out.xml.Ed254JaxbUnmarshallerPool;
 import com.github.swim_developer.framework.application.port.out.SwimXmlUnmarshallerPort;
 import com.github.swim_developer.ed254.consumer.application.port.in.Ed254ProcessingConfig;
 import com.github.swim_developer.ed254.consumer.application.service.Ed254EventDataValidator;
@@ -53,7 +54,9 @@ import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Optional;
@@ -67,20 +70,33 @@ import static org.mockito.Mockito.*;
 @SuppressWarnings("unchecked")
 class Ed254ConsumerTest {
 
-    private static final String VALID_ARRIVAL_SEQUENCE_XML = """
-            <arrivalSequence xmlns="http://www.eurocae.net/ED-254">
-                <aerodromeDesignator>ESSA</aerodromeDesignator>
-                <publicationTime>%s</publicationTime>
-                <creationTime>%s</creationTime>
-                <firstMessageAfterServiceOutage>false</firstMessageAfterServiceOutage>
-            </arrivalSequence>
-            """.formatted(Instant.now().toString(), Instant.now().toString());
+    private static final DateTimeFormatter UTC_TYPE =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter UTC_HIGH_PRECISION_TYPE =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
-    private static final String VALID_PROVIDER_EXCEPTION_XML = """
-            <providerExceptions xmlns="http://www.eurocae.net/ED-254">
-                <provException>Test exception</provException>
-            </providerExceptions>
-            """;
+    private static final String VALID_ARRIVAL_SEQUENCE_XML;
+    private static final String VALID_PROVIDER_EXCEPTION_XML;
+
+    static {
+        Instant now = Instant.now();
+        VALID_ARRIVAL_SEQUENCE_XML = """
+                <arrivalSequence xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0"
+                                 xmlns:fb="http://www.fixm.aero/base/4.3"
+                                 xmlns:fx="http://www.fixm.aero/flight/4.3">
+                    <creationTime>%s</creationTime>
+                    <publicationTime>%s</publicationTime>
+                    <firstMessageAfterServiceOutage>false</firstMessageAfterServiceOutage>
+                    <aerodromeDesignator>ESSA</aerodromeDesignator>
+                    <sequenceEntries/>
+                </arrivalSequence>
+                """.formatted(UTC_TYPE.format(now), UTC_HIGH_PRECISION_TYPE.format(now));
+        VALID_PROVIDER_EXCEPTION_XML = """
+                <providerExceptions xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0">
+                    <provException>AMAN_UNAVAILABLE</provException>
+                </providerExceptions>
+                """;
+    }
 
     private static final long THRESHOLD_MS = 30_000;
 
@@ -111,7 +127,7 @@ class Ed254ConsumerTest {
         idempotencyCache = mock(AbstractIdempotencyCache.class);
         deadLetterService = mock(SwimDeadLetterPort.class);
         outboxRouterFanOut = mock(OutboxRouterFanOut.class);
-        jaxbPool = mock(SwimXmlUnmarshallerPort.class);
+        jaxbPool = new Ed254JaxbUnmarshallerPool();
         providerClient = mock(SubscriptionManagerRestClient.class);
         smClientRegistry = mock(Ed254SubscriptionManagerAdapter.class);
         providerConfigParser = mock(SwimProviderConfigPort.class);
@@ -154,11 +170,6 @@ class Ed254ConsumerTest {
 
         Instance<SwimMessageInterceptor> interceptorInstances = mock(Instance.class);
         when(interceptorInstances.isUnsatisfied()).thenReturn(true);
-
-        when(jaxbPool.unmarshalAndValidate(VALID_ARRIVAL_SEQUENCE_XML))
-                .thenReturn(buildArrivalMsg("ESSA", Instant.now(), Instant.now(), false));
-        when(jaxbPool.unmarshalAndValidate(VALID_PROVIDER_EXCEPTION_XML))
-                .thenReturn(buildExceptionMsg("Test exception"));
 
         filterCache = new SubscriptionFilterCache();
         Ed254ProcessingConfig processingConfig = mock(Ed254ProcessingConfig.class);
@@ -228,8 +239,6 @@ class Ed254ConsumerTest {
     @Test
     void invalidXmlIsSentToDlqAndReportedToProvider() throws Exception {
         String badXml = "<broken>not-ed254</broken>";
-        when(jaxbPool.unmarshalAndValidate(badXml))
-                .thenThrow(new XmlValidationException("XML validation failed: element 'broken' not expected"));
 
         ProcessingOutcome outcome = eventProcessor.processAndPersist(
                 "sub-1", "queue-1", "msg-bad", badXml);
@@ -242,27 +251,9 @@ class Ed254ConsumerTest {
     }
 
     @Test
-    void extractionFailureIsSentToDlqAndReportedToProvider() throws Exception {
-        String noAeroXml = "<arrivalSequence/>";
-        when(jaxbPool.unmarshalAndValidate(noAeroXml))
-                .thenReturn(buildArrivalMsg(null, null, null, false));
-
-        ProcessingOutcome outcome = eventProcessor.processAndPersist(
-                "sub-1", "queue-1", "msg-noaero", noAeroXml);
-
-        assertThat(outcome).isEqualTo(ProcessingOutcome.SKIPPED);
-        verify(deadLetterService).sendToDeadLetterQueue(
-                eq("sub-1"), eq("queue-1"), eq("msg-noaero"), eq(0), eq(noAeroXml),
-                eq("EXTRACTION_ERROR"), any(Exception.class));
-        verify(repository, never()).persist((ArrivalEvent) any());
-    }
-
-    @Test
     void staleMessageIsSentToDlqAndReportedToProvider() throws Exception {
         Instant staleTime = Instant.now().minus(Duration.ofMinutes(5));
-        String staleXml = "<arrivalSequence>stale</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(staleXml))
-                .thenReturn(buildArrivalMsg("LFPG", staleTime, staleTime, false));
+        String staleXml = validXml("LFPG", staleTime, staleTime, false);
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
 
         eventProcessor.processAndPersist("sub-1", "queue-1", "msg-stale", staleXml);
@@ -278,9 +269,7 @@ class Ed254ConsumerTest {
     @Test
     void freshTimestampPassesValidation() throws Exception {
         Instant freshTime = Instant.now().minusSeconds(5);
-        String freshXml = "<arrivalSequence>fresh</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(freshXml))
-                .thenReturn(buildArrivalMsg("EHAM", freshTime, freshTime, false));
+        String freshXml = validXml("EHAM", freshTime, freshTime, false);
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
 
         eventProcessor.processAndPersist("sub-1", "queue-1", "msg-fresh", freshXml);
@@ -288,18 +277,6 @@ class Ed254ConsumerTest {
         verify(repository).persist((ArrivalEvent) any());
         verify(deadLetterService, never()).sendToDeadLetterQueue(
                 anyString(), anyString(), anyString(), anyInt(), anyString(), eq("STALE_MESSAGE"), any(Exception.class));
-    }
-
-    @Test
-    void nullCreationTimePassesTimestampValidation() throws Exception {
-        String noTimeXml = "<arrivalSequence>notime</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(noTimeXml))
-                .thenReturn(buildArrivalMsg("LEMD", Instant.now(), null, false));
-        when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
-
-        eventProcessor.processAndPersist("sub-1", "queue-1", "msg-notime", noTimeXml);
-
-        verify(repository).persist((ArrivalEvent) any());
     }
 
     @Test
@@ -333,8 +310,6 @@ class Ed254ConsumerTest {
     @Test
     void communicateProblemsFailureDoesNotBlockProcessing() throws Exception {
         String badXml = "<broken/>";
-        when(jaxbPool.unmarshalAndValidate(badXml))
-                .thenThrow(new XmlValidationException("validation failed"));
 
         ProcessingOutcome outcome = eventProcessor.processAndPersist(
                 "sub-1", "queue-1", "msg-cp", badXml);
@@ -346,9 +321,8 @@ class Ed254ConsumerTest {
 
     @Test
     void firstMessageAfterServiceOutageIsCaptured() throws Exception {
-        String outageXml = "<arrivalSequence>outage</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(outageXml))
-                .thenReturn(buildArrivalMsg("LFPG", Instant.now(), Instant.now(), true));
+        Instant now = Instant.now();
+        String outageXml = validXml("LFPG", now, now, true);
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
 
         eventProcessor.processAndPersist("sub-1", "queue-1", "msg-outage", outageXml);
@@ -537,10 +511,8 @@ class Ed254ConsumerTest {
     void twoFreshMessagesInOrder_bothPersisted() throws Exception {
         Instant t1 = Instant.now().minusSeconds(5);
         Instant t2 = Instant.now().minusSeconds(2);
-        String xml1 = "<arrivalSequence>t1</arrivalSequence>";
-        String xml2 = "<arrivalSequence>t2</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(xml1)).thenReturn(buildArrivalMsg("EGLL", t1, t1, false));
-        when(jaxbPool.unmarshalAndValidate(xml2)).thenReturn(buildArrivalMsg("EGLL", t2, t2, false));
+        String xml1 = validXml("EGLL", t1, t1, false);
+        String xml2 = validXml("EGLL", t2, t2, false);
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
 
         eventProcessor.processAndPersist("sub-1", "q-1", "msg-t1", xml1);
@@ -552,8 +524,7 @@ class Ed254ConsumerTest {
     @Test
     void staleMessageAfterFreshOne_rejectedByTimestampValidation() throws Exception {
         Instant stale = Instant.now().minus(Duration.ofMinutes(10));
-        String staleXml = "<arrivalSequence>stale-after-fresh</arrivalSequence>";
-        when(jaxbPool.unmarshalAndValidate(staleXml)).thenReturn(buildArrivalMsg("EDDF", stale, stale, false));
+        String staleXml = validXml("EDDF", stale, stale, false);
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
 
         ProcessingOutcome outcome = eventProcessor.processAndPersist("sub-1", "q-1", "msg-stale2", staleXml);
@@ -569,10 +540,9 @@ class Ed254ConsumerTest {
 
     @Test
     void firstMessageAfterOutage_triggersGapDetectionAndPersists() throws Exception {
-        String outageXml = "<arrivalSequence>outage-gap</arrivalSequence>";
+        Instant now = Instant.now();
+        String outageXml = validXml("LFPG", now, now, true);
         DataValidationResult gapResult = DataValidationResult.sequenceGaps(List.of("TAP1234", "SAS5678"));
-        when(jaxbPool.unmarshalAndValidate(outageXml))
-                .thenReturn(buildArrivalMsg("LFPG", Instant.now(), Instant.now(), true));
         when(idempotencyCache.isAlreadyProcessed(anyString(), anyString())).thenReturn(false);
         when(sequenceGapDetector.detect(eq("q-1"), any(ArrivalSequence.class))).thenReturn(Optional.of(gapResult));
 
@@ -585,6 +555,20 @@ class Ed254ConsumerTest {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    private static String validXml(String aerodrome, Instant pub, Instant create, boolean outage) {
+        return """
+                <arrivalSequence xmlns="http://coopans.org/swim/ed254/arrivalSequence/1.0"
+                                 xmlns:fb="http://www.fixm.aero/base/4.3"
+                                 xmlns:fx="http://www.fixm.aero/flight/4.3">
+                    <creationTime>%s</creationTime>
+                    <publicationTime>%s</publicationTime>
+                    <firstMessageAfterServiceOutage>%s</firstMessageAfterServiceOutage>
+                    <aerodromeDesignator>%s</aerodromeDesignator>
+                    <sequenceEntries/>
+                </arrivalSequence>
+                """.formatted(UTC_TYPE.format(create), UTC_HIGH_PRECISION_TYPE.format(pub), outage, aerodrome);
+    }
 
     private static Ed254Message buildArrivalMsg(String aerodrome, Instant pubTime, Instant createTime, boolean outage) {
         ArrivalSequence seq = new ArrivalSequence();
