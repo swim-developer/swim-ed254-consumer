@@ -57,21 +57,14 @@ Quarkus 3 / Java 21 service. Hexagonal architecture (ports & adapters). Consumes
 
 ### Package Structure
 
+Base package: `com.github.swim_developer.ed254.consumer`
+
 ```
-com.github.swim_developer.ed254.consumer
-├── domain/model/              # Domain entities: ArrivalEvent, Subscription, FlightSelector, etc.
-├── domain/port/out/           # Outbound port interfaces (ArrivalEventStore, SubscriptionStore)
-├── application/port/in/       # Inbound port interfaces (ManageSubscriptionPort)
-├── application/port/out/      # Application-level outbound ports (SequenceGapCachePort)
-├── application/usecase/       # Use cases: Ed254SubscriptionUseCase, Ed254EventProcessingUseCase
-├── application/service/       # Application services: filter, validate, parse, persist
-├── infrastructure/in/amqp/    # AMQP inbound adapter (Ed254InboxMessageHandler)
-├── infrastructure/in/rest/    # JAX-RS resources and DTOs
-├── infrastructure/out/client/ # REST client adapter to Subscription Manager
-├── infrastructure/out/persistence/  # MongoDB stores (Panache)
-├── infrastructure/out/messaging/    # Kafka outbox + sequence gap detector
-├── infrastructure/out/xml/          # JAXB unmarshalling + event extraction
-└── infrastructure/config/           # Quarkus config adapters
+domain/                  Domain entities, ports
+application/             Use cases, services, inbound/outbound ports
+infrastructure/in/       AMQP adapter, REST resources
+infrastructure/out/      Persistence (MongoDB), messaging (Kafka), XML, REST client
+infrastructure/config/   Quarkus config adapters
 ```
 
 ### Event Processing Pipeline
@@ -108,14 +101,4 @@ This service extends `swim-developer-framework` abstractions:
 ## Critical Rules
 
 **Consumer never connects to a Provider directly.** During dev/test the consumer connects to `swim-ed254-consumer-validator` (a fake SWIM provider). The `SWIM_PROVIDERS` config must always point to the validator, never to `swim-ed254-provider`.
-
-**No AI authorship in commits.** Never add `Co-Authored-By` or any AI/tool trailer to commit messages. The sole author is the human developer.
-
-**Never change production code to make tests pass.** Investigate the real defect. Ask before touching production code for test purposes.
-
-**No Java Reflection.** No `Field.setAccessible`, no reflective injection — not in production, not in tests.
-
-**Max 400 lines per file** (except Markdown). If exceeded, modularize.
-
-**One action at a time.** Show what will be done, wait for confirmation before executing. Never bundle multiple instructions or questions.
 
